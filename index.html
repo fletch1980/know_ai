@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ask AI — Bible Study Hub</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0a1a; font-family: system-ui, sans-serif; min-height: 100vh; padding: 20px 16px 60px; color: white; }
+    .back-btn { display: inline-flex; align-items: center; gap: 6px; color: #818cf8; font-size: 13px; text-decoration: none; margin-bottom: 20px; }
+    .back-btn:hover { color: white; }
+    .header { text-align: center; margin-bottom: 24px; }
+    .header .icon { font-size: 40px; margin-bottom: 8px; }
+    .header h1 { font-size: 22px; font-weight: 900; }
+    .header p { font-size: 13px; color: #9ca3af; margin-top: 4px; }
+
+    /* Suggestions */
+    .suggestions { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+    .sug-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #818cf8; margin-bottom: 10px; }
+    .sug-btn { display: block; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid rgba(255,255,255,0.05); color: #c7d2fe; font-size: 13px; padding: 10px 0; cursor: pointer; line-height: 1.4; }
+    .sug-btn:last-child { border-bottom: none; padding-bottom: 0; }
+    .sug-btn:hover { color: white; }
+
+    /* Conversation */
+    .conversation { margin-bottom: 16px; }
+    .msg { border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+    .msg.user { background: rgba(99,102,241,0.2); border: 1px solid rgba(99,102,241,0.3); margin-left: 32px; }
+    .msg.assistant { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); margin-right: 16px; }
+    .msg-role { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+    .msg.user .msg-role { color: #818cf8; }
+    .msg.assistant .msg-role { color: #4ade80; }
+    .msg-text { font-size: 13px; line-height: 1.7; color: rgba(255,255,255,0.9); }
+
+    .thinking { font-size: 13px; color: #4b5563; font-style: italic; }
+
+    /* Input */
+    .input-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 16px; }
+    textarea { width: 100%; background: rgba(10,10,26,0.8); border: 1px solid rgba(129,140,248,0.4); border-radius: 10px; padding: 12px; font-size: 13px; color: white; font-family: system-ui, sans-serif; resize: none; outline: none; }
+    textarea:focus { border-color: #818cf8; }
+    .btn-row { display: flex; gap: 10px; margin-top: 8px; }
+    .ask-btn { flex: 1; padding: 11px; background: #3730a3; border: none; border-radius: 10px; color: white; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .ask-btn:hover { background: #6366f1; }
+    .ask-btn:disabled { opacity: 0.5; cursor: default; }
+    .clear-btn { padding: 11px 16px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #9ca3af; font-size: 13px; cursor: pointer; }
+    .clear-btn:hover { background: rgba(255,255,255,0.1); }
+  </style>
+</head>
+<body>
+
+<a class="back-btn" href="../index.html">← Bible Study Hub</a>
+<div class="header">
+  <div class="icon">🤖</div>
+  <h1>Ask AI</h1>
+  <p>Ask anything about Scripture, canon & theology</p>
+</div>
+
+<div id="suggestionsBox" class="suggestions">
+  <div class="sug-label">💡 Try asking</div>
+  <button class="sug-btn" onclick="ask(this.textContent)">What are the Dead Sea Scrolls and why do they matter?</button>
+  <button class="sug-btn" onclick="ask(this.textContent)">What does 'Yahweh' mean and should I use it?</button>
+  <button class="sug-btn" onclick="ask(this.textContent)">What is the difference between Messianic Judaism and Christianity?</button>
+  <button class="sug-btn" onclick="ask(this.textContent)">Were there really books removed from the Bible?</button>
+  <button class="sug-btn" onclick="ask(this.textContent)">Did God really harden Pharaoh's heart? Is that fair?</button>
+  <button class="sug-btn" onclick="ask(this.textContent)">What is the Talmud?</button>
+  <button class="sug-btn" onclick="ask(this.textContent)">How do I know the Bible is true?</button>
+</div>
+
+<div class="conversation" id="conversation"></div>
+
+<div class="input-card">
+  <textarea id="inputBox" rows="3" placeholder="Ask anything about the Bible, theology, or different traditions..."></textarea>
+  <div class="btn-row">
+    <button class="ask-btn" id="askBtn" onclick="ask()">Ask</button>
+    <button class="clear-btn" id="clearBtn" onclick="clearChat()" style="display:none;">Clear</button>
+  </div>
+</div>
+
+<script>
+  var history = [];
+  var loading = false;
+
+  function ask(prefill) {
+    var input = document.getElementById('inputBox');
+    var q = prefill || input.value.trim();
+    if (!q || loading) return;
+    input.value = '';
+
+    // Hide suggestions after first question
+    document.getElementById('suggestionsBox').style.display = 'none';
+    document.getElementById('clearBtn').style.display = 'block';
+
+    addMsg('user', q);
+    history.push({ role: 'user', content: q });
+
+    setLoading(true);
+
+    fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: 'You are a knowledgeable, respectful Bible and theology guide. Answer clearly and fairly, representing multiple perspectives where relevant. Be warm and use plain language. Cite scripture references when helpful. Keep answers to 3–5 paragraphs.',
+        messages: history
+      })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var text = (d.content && d.content[0] && d.content[0].text) || 'No answer returned.';
+      history.push({ role: 'assistant', content: text });
+      removeThinking();
+      addMsg('assistant', text);
+      setLoading(false);
+    })
+    .catch(function() {
+      removeThinking();
+      addMsg('assistant', 'Something went wrong. Please try again.');
+      history.pop();
+      setLoading(false);
+    });
+  }
+
+  function addMsg(role, text) {
+    var conv = document.getElementById('conversation');
+    var div = document.createElement('div');
+    div.className = 'msg ' + role;
+    div.innerHTML = '<div class="msg-role">' + (role === 'user' ? 'You' : 'Guide') + '</div>'
+      + '<div class="msg-text">' + escHtml(text) + '</div>';
+    conv.appendChild(div);
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  function setLoading(val) {
+    loading = val;
+    var btn = document.getElementById('askBtn');
+    if (val) {
+      btn.disabled = true;
+      btn.textContent = 'Thinking...';
+      var conv = document.getElementById('conversation');
+      var div = document.createElement('div');
+      div.className = 'msg assistant';
+      div.id = 'thinkingMsg';
+      div.innerHTML = '<div class="msg-role">Guide</div><div class="thinking">Thinking...</div>';
+      conv.appendChild(div);
+      window.scrollTo(0, document.body.scrollHeight);
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Ask';
+    }
+  }
+
+  function removeThinking() {
+    var el = document.getElementById('thinkingMsg');
+    if (el) el.remove();
+  }
+
+  function clearChat() {
+    history = [];
+    document.getElementById('conversation').innerHTML = '';
+    document.getElementById('suggestionsBox').style.display = 'block';
+    document.getElementById('clearBtn').style.display = 'none';
+  }
+
+  document.getElementById('inputBox').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); }
+  });
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
